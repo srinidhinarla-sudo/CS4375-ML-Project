@@ -6,12 +6,33 @@
 %   Slide 4: results + conclusion + one limitation + one future direction
 \documentclass[10pt,aspectratio=169]{beamer}
 \usetheme{default}
-\usecolortheme{seahorse}
-\useinnertheme{rectangles}
-\useoutertheme{infolines}
+\usecolortheme{default}
 \setbeamertemplate{navigation symbols}{}
+\setbeamertemplate{footline}{}
+\setbeamertemplate{headline}{}
+
+% --- beige / white palette ---
+\definecolor{SlideBeige}{RGB}{245,240,230}
+\definecolor{SlideBrown}{RGB}{90,70,50}
+\definecolor{SlideAccent}{RGB}{140,100,60}
+
+\setbeamercolor{background canvas}{bg=SlideBeige}
+\setbeamercolor{frametitle}{fg=black,bg=SlideBeige}
+\setbeamercolor{title}{fg=black}
+\setbeamercolor{subtitle}{fg=black}
+\setbeamercolor{author}{fg=black}
+\setbeamercolor{institute}{fg=black}
+\setbeamercolor{normal text}{fg=black}
+\setbeamercolor{itemize item}{fg=black}
+\setbeamercolor{itemize subitem}{fg=black}
+\setbeamercolor{structure}{fg=black}
+
 \setbeamerfont{frametitle}{size=\Large,series=\bfseries}
-\setbeamerfont{footline}{size=\tiny}
+\setbeamerfont{title}{size=\LARGE,series=\bfseries}
+
+% thin rule under frame title
+\addtobeamertemplate{frametitle}{}{%
+  \vspace{-4pt}\textcolor{black}{\hrule height 0.4pt}\vspace{4pt}}
 \usepackage{booktabs}
 \usepackage{graphicx}
 \graphicspath{{figures/}}
@@ -19,8 +40,8 @@
 \title{CNN Architectures for Image Classification}
 \subtitle{MNIST, CIFAR-10 \& a channel-attention residual variant}
 \date{}
-\author{Author~A \and Author~B}
-\institute{Department of Computer Science, UT Dallas \\ CS 4375.002 --- Spring 2026}
+\author{Srinidhi Narla \& Pranav Cheedalla}
+\institute{Department of Computer Science, UT Dallas \\ CS 4375.002, Spring 2026}
 
 \begin{document}
 
@@ -72,10 +93,12 @@ accuracy, macro precision/recall/F1, and AUROC.
 \end{column}
 \end{columns}
 \vspace{4pt}\small
-\textbf{Takeaway.} MNIST is already well-separable in low-dim
-projections of the raw pixels (LDA in particular). CIFAR-10 classes
-overlap heavily in pixel space --- this is why a flat MLP plateaus
-near 50\%, while a CNN can recover separable feature representations.
+\textbf{Takeaway.} MNIST classes form clear clusters even in raw
+pixel space (LDA separates all 10 digits in 2D) --- this explains
+why even a flat MLP scores 99\%. CIFAR-10 is the opposite: all
+projections collapse into one overlapping cloud. Every percentage
+point above 50\% on CIFAR-10 requires spatial feature learning that
+only convolution can provide.
 \end{frame}
 
 % =====================================================================
@@ -140,24 +163,25 @@ ResNet-18       & 99.65\% & 91.38\% & 0.914 \\
 \bottomrule
 \end{tabular}
 \vspace{6pt}\\
-\textbf{Findings.}
+\textbf{Key findings.}
 \begin{itemize}\small
-  \item CNNs dominate MLP on CIFAR-10 by $>30$ pp; on MNIST, all
-    models are within 1\,pp.
-  \item Residual connections beat VGG-11 at a smaller parameter
-    budget.
-  \item SE-ResNet-Lite is the best model on \emph{both} datasets, at
-    $<\!1\%$ extra parameters vs ResNet-18.
+  \item Architecture barely matters on MNIST (0.67 pp spread); it
+    matters enormously on CIFAR-10 (42.5 pp spread, MLP to SE-ResNet-Lite).
+  \item Residual connections outperform VGG-11 by 1.9 pp at similar
+    parameter count --- skip connections are doing real work, not just
+    adding depth.
+  \item SE-ResNet-Lite tops all models on \emph{both} datasets at
+    $<\!1\%$ parameter overhead. The gain is most visible on
+    \emph{cat}/\emph{dog}, where texture cues matter most.
 \end{itemize}
 \end{column}
 \begin{column}{0.42\linewidth}
 \centering
 \includegraphics[width=\linewidth]{compare_cifar10.png}\\[3pt]
-\small\textbf{One limitation.} Single seed, no hyperparameter
-sweep.\\[3pt]
-\textbf{One future improvement.} Train ablations of SE-only and
-DW-stem-only, evaluate on Tiny ImageNet, sweep the SE reduction
-ratio.
+\small\textbf{Limitation.} Single random seed --- 1--2 pp differences
+need multiple runs to be statistically meaningful.\\[3pt]
+\textbf{Future work.} Ablate SE-only vs DW-stem-only; sweep
+reduction ratio $r$; test on Tiny ImageNet.
 \end{column}
 \end{columns}
 \end{frame}
