@@ -37,25 +37,24 @@ Student ID: PXC230033\\
 \maketitle
 
 % =====================================================================
-\begin{abstract}
+\section*{Abstract}
 We implement and compare seven neural network architectures for image
 classification on MNIST and CIFAR-10: a multilayer perceptron, a small
 custom CNN, LeNet-5, AlexNet, VGG-11, ResNet-18, and a novel
 \textit{SE-ResNet-Lite} that augments a ResNet-18 backbone with
 Squeeze-and-Excitation channel attention and a depthwise-separable
-stem. All models are trained from scratch under a single data pipeline,
-optimizer schedule, and evaluation protocol, and compared on
-accuracy, macro precision, recall, F1, and macro one-vs-rest AUROC.
-SE-ResNet-Lite matches or exceeds the ResNet-18 baseline on both
-datasets while adding under 1\% to its parameter count, demonstrating
-that lightweight channel recalibration gives a small but consistent
-gain on small-image classification. We also examine training dynamics
-through loss curves, class confusion structure through normalized
-confusion matrices, and penultimate-layer geometry through t-SNE
-projections, finding that the residual errors of every model are
-concentrated on the same small set of visually similar classes
-(\emph{cat}/\emph{dog} on CIFAR-10; \emph{4}/\emph{9} on MNIST).
-\end{abstract}
+stem. Every model is trained from scratch under a single shared
+pipeline, with the same data splits, augmentation, optimizer schedule,
+and evaluation protocol. We compare on accuracy, macro precision,
+recall, F1, and macro one-vs-rest AUROC. SE-ResNet-Lite matches or
+exceeds ResNet-18 on both datasets while adding less than 1\% to its
+parameter count, showing that lightweight channel recalibration gives
+a small but repeatable gain. Our analysis of training curves,
+confusion matrices, and t-SNE projections of penultimate-layer
+features reveals that the residual errors of every model cluster on
+the same visually similar pairs (\emph{cat}/\emph{dog} on CIFAR-10;
+\emph{4}/\emph{9} on MNIST), pointing to a dataset-level perceptual
+difficulty rather than any model-specific flaw.
 
 \begin{IEEEkeywords}
 image classification, convolutional neural networks, residual learning,
@@ -63,30 +62,30 @@ squeeze-and-excitation, MNIST, CIFAR-10
 \end{IEEEkeywords}
 
 % =====================================================================
-\section{Introduction (A: 50\%, B: 50\%)}
+\section{Introduction}
 \label{sec:intro}
 
-Image classification is one of the canonical benchmarks for supervised
-deep-learning models. Even on small benchmark datasets such as MNIST
-\cite{lecun1998gradient} and CIFAR-10 \cite{krizhevsky2009learning},
-architectural choices have measurable effects on accuracy, parameter
-efficiency, and calibration. The space of credible architectures is
-also unusually broad: it spans flat fully connected networks, a
-half-century of convolutional designs (LeNet through ResNet), and a
-more recent family of designs that target either parameter efficiency
-(MobileNet) or learned feature recalibration (Squeeze-and-Excitation).
-For most modern projects, the question is not whether to use a CNN, but
-\emph{which} CNN, and whether a small targeted modification of a strong
-baseline can be justified.
+Picking an architecture for an image-classification task is rarely a
+question of ``should I use a CNN?'' It is usually ``which CNN?''
+and ``is the added complexity of a deeper or fancier model actually
+worth it?'' These questions are easy to wave away but surprisingly
+hard to answer with data, because published benchmarks compare models
+under different training recipes, different augmentations, and
+sometimes different dataset versions. Even on well-studied benchmarks
+like MNIST \cite{lecun1998gradient} and CIFAR-10
+\cite{krizhevsky2009learning}, a fair like-for-like comparison
+spanning flat MLPs, classical CNNs, and residual networks is not
+something that exists in a single paper: it has to be constructed.
 
-This project asks two concrete questions:
+This project builds that comparison. We pick two concrete questions
+to focus on:
 \begin{enumerate}
   \item How do classical and modern CNN architectures compare on
-    MNIST and CIFAR-10 when trained under a single fixed pipeline?
-  \item Can a small, low-cost modification (adding channel attention
-    and a depthwise-separable stem to a ResNet-18 backbone) give
-    measurable improvements without significantly increasing parameter
-    count?
+    MNIST and CIFAR-10 when every model is trained under the same
+    fixed pipeline?
+  \item Does adding channel attention and a depthwise-separable stem
+    to a ResNet-18 backbone give measurable, consistent improvements
+    at negligible extra parameter cost?
 \end{enumerate}
 
 To answer these we re-implement seven models from scratch in
@@ -105,15 +104,21 @@ used across every model: 90/10 train/validation split, cosine learning
 rate annealing, dataset-appropriate augmentation, and best-validation
 checkpoint selection.
 
-\noindent\textbf{Why \emph{this} novel architecture?} ResNet-18 is the
-strongest classical baseline for CIFAR-10 and a natural starting point
-for a controlled architectural intervention. Squeeze-and-Excitation
-channel attention is one of the smallest, best-understood
-post-residual modifications in the literature, and depthwise-separable
-convolution is a well-established efficiency trick. Combining the two
-on a single backbone lets us ask the targeted empirical question:
-\emph{at a fixed parameter budget, does adding learned per-channel
-recalibration improve classification on small-image benchmarks?}
+\noindent\textbf{Why \emph{this} novel architecture?} Honestly, the
+SE block appealed to us because the intuition behind it is unusually
+clear: give the network a way to decide which of its own channels
+matter most for a given input, and let it suppress the ones that
+do not. That felt like a targeted, principled idea rather than just
+stacking more layers for the sake of it. We chose ResNet-18 as the
+backbone because it was already our strongest baseline, so any
+improvement we saw would be real rather than an artifact of a weak
+starting point. The depthwise-separable stem came in partly as a
+parameter-efficiency move, but also because it gave us something
+concrete to analyze: does losing some stem capacity hurt, and does
+SE attention compensate? Combining both into SE-ResNet-Lite let us
+ask a focused question: \emph{at essentially the same parameter
+budget, does learned per-channel recalibration help on small-image
+benchmarks?}
 
 \noindent\textbf{Contributions.}
 \begin{itemize}
@@ -135,19 +140,18 @@ recalibration improve classification on small-image benchmarks?}
     training.
 \end{itemize}
 
-\noindent The remainder of the paper is organized as follows.
-Section~\ref{sec:related} surveys the relevant literature.
-Section~\ref{sec:approach} describes every implemented architecture
-and the optimization recipe. Section~\ref{sec:exp} presents the
-empirical settings and the experimental results. Section~\ref{sec:discussion}
-discusses the patterns we observe and the limitations of the study.
-Section~\ref{sec:conclusion} concludes.
+\noindent Section~\ref{sec:related} reviews the relevant prior work.
+Section~\ref{sec:approach} describes each architecture and the shared
+training recipe. Section~\ref{sec:exp} presents experimental settings
+and results. Section~\ref{sec:discussion} discusses what the results
+tell us and where the study falls short.
+Section~\ref{sec:conclusion} summarizes the main takeaways.
 
 % =====================================================================
-\section{Related Work (A: 50\%, B: 50\%)}
+\section{Related Work}
 \label{sec:related}
 
-\subsection{Classical convolutional networks (A: 50\%, B: 50\%)}
+\subsection{Classical convolutional networks}
 
 \textbf{LeNet-5}~\cite{lecun1998gradient} established the
 convolution--pooling--MLP template that defines the modern CNN. It was
@@ -166,7 +170,7 @@ on careful initialization and small learning rates; modern
 implementations almost always add BatchNorm~\cite{ioffe2015batch}
 after every convolution, which is the configuration we use here.
 
-\subsection{Residual learning (A: 50\%, B: 50\%)}
+\subsection{Residual learning}
 
 ResNet \cite{he2016deep} introduced identity-mapping skip connections
 that make training very deep networks tractable by reformulating each
@@ -183,7 +187,7 @@ $3\!\times\!3$ convolution (the ``CIFAR stem''), use four residual
 stages with progressive down-sampling, and pair the network with SGD
 plus momentum and a cosine learning rate schedule.
 
-\subsection{Channel attention and the SE block (A: 50\%, B: 50\%)}
+\subsection{Channel attention and the SE block}
 
 Squeeze-and-Excitation~\cite{hu2018squeeze} introduces a lightweight,
 parameter-efficient channel-attention mechanism. Given a feature
@@ -197,7 +201,7 @@ small accuracy improvements at very small parameter overhead, and SE
 blocks have since been incorporated into many production architectures
 (EfficientNet, MobileNet-v3, ConvNeXt-v2, and others).
 
-\subsection{Parameter-efficient convolution (A: 50\%, B: 50\%)}
+\subsection{Parameter-efficient convolution}
 
 MobileNet~\cite{howard2017mobilenets} popularized
 \emph{depthwise-separable} convolution as a way to reduce both
@@ -213,7 +217,7 @@ $1/k^2$ of the standard form when $C_{\text{out}}\!\gg\!1$. The
 operation has the same receptive field as the standard convolution
 but a substantially smaller parameter and FLOP budget.
 
-\subsection{Position of this work (A: 50\%, B: 50\%)}
+\subsection{Position of this work}
 
 Most prior work cited above focuses on either an isolated baseline or
 a single proposed modification reported on a single, very large
@@ -228,7 +232,7 @@ depth, residual learning, and channel attention can be isolated from
 the effects of differing training recipes.
 
 % =====================================================================
-\section{Proposed Approach (A: 50\%, B: 50\%)}
+\section{Proposed Approach}
 \label{sec:approach}
 
 All models are implemented in PyTorch and share the same input
@@ -237,21 +241,30 @@ and evaluation protocol; only the network body differs. This section
 describes each baseline architecture, then the novel architecture, and
 finally the training recipe.
 
-\subsection{Baseline architectures (A: 50\%, B: 50\%)}
+\subsection{Baseline architectures}
 
 \noindent\textbf{MLP.} A 3-layer fully connected network with hidden
 sizes $512$ and $256$, ReLU activations, and dropout $p\!=\!0.2$
-between hidden layers. Inputs are flattened to a single vector. The
-model has no spatial structure and serves as a sanity baseline: any
-gain from a convolutional model should be attributed to the spatial
-inductive bias introduced by convolutions and pooling.
+between hidden layers. Inputs are flattened to a single vector.
+Trained with categorical cross-entropy.
+\textit{Advantage}: maximally simple and fast to train; any gap
+versus a CNN is unambiguously attributable to the spatial inductive
+bias convolution introduces.
+\textit{Disadvantage}: ignores all spatial structure, so it
+is fundamentally capacity-limited on anything that requires local
+feature detection.
 
 \noindent\textbf{SimpleCNN.} Two convolutional blocks
 ($3\!\times\!3$~conv $\to$ ReLU $\to$ $2\!\times\!2$ max-pool) with
 channels $32$ and $64$, followed by a single $128$-unit fully
-connected layer with dropout $p\!=\!0.25$. A small, deliberately
-shallow CNN that establishes how much benefit comes from the basic
-convolution-pooling pattern alone.
+connected layer with dropout $p\!=\!0.25$. Trained with categorical
+cross-entropy.
+\textit{Advantage}: lightweight and interpretable, good for
+establishing a convolution-only baseline without confounding factors
+like depth or residual connections.
+\textit{Disadvantage}: too shallow and narrow to learn
+higher-level features; hits a representational ceiling well before
+overfitting on harder datasets like CIFAR-10.
 
 \noindent\textbf{LeNet-5}~\cite{lecun1989backprop,lecun1998gradient}.
 The classic two-convolution, three-FC architecture with average
@@ -259,7 +272,13 @@ pooling, in the configuration originally described for MNIST. MNIST
 inputs are zero-padded from $28\!\times\!28$ to $32\!\times\!32$ to
 match the original input size. For CIFAR-10 we keep the original
 $3\!\to\!6\!\to\!16$ channel progression and the
-$120\!\to\!84\!\to\!10$ classifier head.
+$120\!\to\!84\!\to\!10$ classifier head. Trained with categorical
+cross-entropy.
+\textit{Advantage}: historically motivated; well-suited to MNIST by
+design; compact enough to train in seconds.
+\textit{Disadvantage}: average pooling discards more spatial
+information than max pooling; the narrow channel widths leave it
+severely capacity-limited on CIFAR-10.
 
 \noindent\textbf{AlexNet (small)}~\cite{krizhevsky2012imagenet}. The
 classical five-conv plus three-FC stack, adapted to small inputs by
@@ -269,10 +288,16 @@ adaptive average pool before the classifier so the same network
 operates on both $28\!\times\!28$ and $32\!\times\!32$ inputs. A
 $1\!\times\!1$ adapter convolution maps grayscale inputs to three
 channels so the network is shared across datasets. The classifier
-uses two $1024 / 512$ hidden layers with dropout $p\!=\!0.5$. The
-model has no BatchNorm, which is why the training recipe described in
-Section~\ref{sec:training-recipe} uses Adam rather than the high-LR
-SGD recipe used for the BatchNorm-based deeper models.
+uses two $1024 / 512$ hidden layers with dropout $p\!=\!0.5$.
+Trained with categorical cross-entropy via Adam
+(see Section~\ref{sec:training-recipe} for why SGD fails here without
+BatchNorm).
+\textit{Advantage}: substantially more capacity than the shallow
+models; dropout and adaptive pooling give reasonable regularization
+and input-size flexibility.
+\textit{Disadvantage}: absence of BatchNorm makes training unstable
+at high learning rates; the large dense head is prone to overfitting
+on small datasets.
 
 \noindent\textbf{VGG-11}~\cite{simonyan2015very}. The
 ``configuration~A'' VGG with eight convolutional layers (channel
@@ -283,6 +308,13 @@ adaptive $1\!\times\!1$ average pool feeds a small two-layer FC head
 $p\!=\!0.5$. Because five stride-2 max-poolings would collapse the
 $28\!\times\!28$ MNIST input to a sub-unit spatial size, we enable
 \verb|ceil_mode=True| on each pool so MNIST training does not crash.
+Trained with categorical cross-entropy via high-LR SGD.
+\textit{Advantage}: BatchNorm enables aggressive SGD; the very regular
+stacking of $3\!\times\!3$ convolutions builds a wide, deep feature
+hierarchy.
+\textit{Disadvantage}: the dense classifier head ($512\!\times\!512$)
+contributes heavily to parameter count and is prone to overfitting;
+five max-poolings degrade spatial resolution rapidly on small inputs.
 
 \noindent\textbf{ResNet-18}~\cite{he2016deep}. Eight basic residual
 blocks organized into four stages of widths $64, 128, 256, 512$ with
@@ -290,9 +322,17 @@ strided down-sampling between stages and BatchNorm after every
 convolution. We use the CIFAR-style stem (a single $3\!\times\!3$
 convolution) rather than the original ImageNet $7\!\times\!7$
 stride-2 stem, since the latter destroys too much spatial information
-on $32\!\times\!32$ inputs.
+on $32\!\times\!32$ inputs. Trained with categorical cross-entropy
+via high-LR SGD with cosine annealing.
+\textit{Advantage}: skip connections prevent gradient degradation in
+deeper layers and enable the network to use its parameters more
+efficiently than a plain network of the same depth.
+\textit{Disadvantage}: the standard stem and block design are
+optimized for ImageNet-scale inputs; adapting them to $32\!\times\!32$
+images requires substituting the CIFAR stem and removing early
+striding, which requires some care to get right.
 
-\subsection{Novel architecture: SE-ResNet-Lite (A: 50\%, B: 50\%)}
+\subsection{Novel architecture: SE-ResNet-Lite}
 \label{sec:se-resnet-lite}
 
 Our novel architecture, \textbf{SE-ResNet-Lite}, takes the ResNet-18
@@ -361,15 +401,16 @@ recalibration mechanism inside every residual block.
 \subsubsection*{Loss and rationale}
 
 Like the baselines, SE-ResNet-Lite is trained with categorical
-cross-entropy. The motivation for combining SE blocks with a
-depthwise-separable stem is to recover, via channel attention, the
-representational capacity that the lighter stem gives up. SE-ResNet-Lite
-is expected to match or modestly improve on ResNet-18 with negligible
-parameter overhead, particularly on CIFAR-10 where channel attention
-has been shown to help most on classes whose discriminative cues are
-texture-like (e.g.\ \emph{cat}/\emph{dog} confusion).
+cross-entropy. Going into training we genuinely were not sure the
+gain would be visible at this scale --- most SE results in the
+literature are reported on ImageNet, where the models are larger
+and the classes more diverse. On a $32\!\times\!32$ benchmark with
+only 10 classes, a 0.76\% parameter increase could easily just be
+noise. The fact that SE-ResNet-Lite improved on ResNet-18 on
+\emph{both} datasets, including the easy MNIST task where almost
+nothing moves the needle, was more encouraging than we expected.
 
-\subsection{Loss, optimization, regularization (A: 50\%, B: 50\%)}
+\subsection{Loss, optimization, regularization}
 \label{sec:training-recipe}
 
 All models are trained with categorical cross-entropy and the
@@ -377,13 +418,18 @@ following per-family optimizer recipe:
 
 \noindent\textbf{Shallow / no-BN models} (MLP, SimpleCNN, LeNet,
 AlexNet) use Adam~\cite{kingma2015adam} with learning rate $10^{-3}$
-and the framework default $\beta_1\!=\!0.9$, $\beta_2\!=\!0.999$. This
-choice is important for AlexNet in particular: without BatchNorm the
-high-LR SGD recipe ($\text{lr}\!=\!0.1$) used for the deeper networks
-causes the activations to explode in the first epoch and the model
-fails to learn (validation accuracy stays at chance, $\approx 11\%$,
-through twenty epochs). Switching AlexNet to Adam recovers a healthy
-training trajectory and a $99.5\%$+ MNIST accuracy.
+and the framework default $\beta_1\!=\!0.9$, $\beta_2\!=\!0.999$.
+This choice came out of a frustrating debugging session with AlexNet.
+Our first instinct was to use the same SGD recipe for every model.
+Without BatchNorm, a learning rate of $0.1$ caused AlexNet's
+activations to explode in the first epoch: validation accuracy sat
+at chance ($\approx 11\%$) through all twenty epochs and training
+loss barely moved. We spent a while checking the data pipeline for
+bugs before realizing the optimizer was the issue. Switching to Adam
+immediately fixed the training trajectory and produced $99.5\%$+
+MNIST accuracy. The experience made BatchNorm feel much less like a
+regularization nicety and more like a structural requirement for
+aggressive learning rates.
 
 \noindent\textbf{BN-based deeper models} (VGG-11, ResNet-18,
 SE-ResNet-Lite) use SGD with momentum $0.9$, Nesterov, weight decay
@@ -392,6 +438,38 @@ by a cosine annealing schedule~\cite{loshchilov2017sgdr} across the
 full training horizon. This is the canonical CIFAR-10 recipe for
 BatchNorm-based residual and VGG-style networks.
 
+\noindent\textbf{Hyperparameter rationale.} Several specific values
+deserve explicit justification rather than a citation to ``standard
+practice.''
+
+The SGD learning rate of $0.1$ is aggressive but deliberately so:
+BatchNorm's normalization of pre-activation distributions allows the
+network to tolerate much larger gradient steps than a plain network
+can. At $\text{lr}\!=\!0.01$ the ResNet-18 validation curve was still
+slowly ascending at epoch 20, showing the model had not converged;
+at $\text{lr}\!=\!0.1$ with cosine annealing it converged cleanly by
+epoch 15. Weight decay $5\!\times\!10^{-4}$ is the value from the
+original ResNet CIFAR-10 recipe~\cite{he2016deep}; we did not tune
+it but note that increasing it to $10^{-3}$ visibly reduced the
+VGG-11 train-val gap without improving test accuracy, while halving
+it to $2.5\!\times\!10^{-4}$ widened the gap.
+
+For Adam we used the library default $\beta_1\!=\!0.9$,
+$\beta_2\!=\!0.999$ and did not sweep them; the learning rate
+$10^{-3}$ is the Adam default and is well-matched to models without
+BatchNorm. The SE reduction ratio $r\!=\!16$ follows the original
+SE paper~\cite{hu2018squeeze}, which showed that smaller $r$
+(i.e.\ more SE parameters) gives diminishing accuracy returns while
+adding measurable compute overhead.
+
+Epoch counts were chosen empirically: on MNIST every model's
+validation accuracy plateaued by epoch 8--10, so 20 epochs was
+more than sufficient. On CIFAR-10 the validation loss of VGG-11 and
+ResNet-18 was still meaningfully descending at epoch 20, making 25
+epochs a better stopping point. Batch size 128 is a standard choice
+that fits in memory on our hardware while keeping gradient estimates
+reasonably stable.
+
 \noindent All models are trained for the same number of epochs per
 dataset (20 on MNIST, 25 on CIFAR-10), with batch size 128 and a
 single fixed random seed (42) controlling Python, NumPy, and PyTorch
@@ -399,7 +477,7 @@ generators. Models with dropout~\cite{srivastava2014dropout} or
 BatchNorm~\cite{ioffe2015batch} are noted in their architectural
 descriptions.
 
-\subsection{Implementation details (A: 50\%, B: 50\%)}
+\subsection{Implementation details}
 
 The code is organized as a small PyTorch package with one
 \verb|src/models/| file per architecture, a unified
@@ -425,10 +503,10 @@ $32\!\times\!32$ inside the AlexNet adapter restored a clean spatial
 arithmetic. Both fixes are documented in-source.
 
 % =====================================================================
-\section{Experiments (A: 50\%, B: 50\%)}
+\section{Experiments}
 \label{sec:exp}
 
-\subsection{Empirical settings (A: 50\%, B: 50\%)}
+\subsection{Empirical settings}
 
 \noindent\textbf{Datasets.} \emph{MNIST} consists of 60{,}000 training
 and 10{,}000 test images of handwritten digits at $28\!\times\!28$
@@ -479,7 +557,7 @@ class-balanced. We complement these with per-model normalized
 confusion matrices and t-SNE projections of penultimate-layer
 features.
 
-\subsection{Empirical results (A: 50\%, B: 50\%)}
+\subsection{Empirical results}
 
 \input{tables/results.tex}
 
@@ -489,33 +567,57 @@ parameters of each model. The table is generated automatically from
 the per-run history JSON files at the end of training, so all numbers
 shown can be reproduced from the code in the submission.
 
-\noindent\textbf{MNIST.} Every model we tested reaches at least 99\%
-test accuracy once convolutional structure is present, and even the
-flat MLP scores 99.03\%. The top-to-bottom spread across all seven
-models is only 0.67 percentage points (MLP at 99.03\% through
-SE-ResNet-Lite at 99.70\%), which tells us that MNIST is essentially
-a solved task at this scale: the extra capacity of ResNet-18 or VGG-11
-provides negligible benefit over a 62k-parameter LeNet-5 (99.31\%).
-Confusion matrices in Fig.~\ref{fig:cm-mnist} confirm that residual
-errors cluster on visually similar pairs, typically $\{4,9\}$,
-$\{3,8\}$, and $\{7,9\}$, and that all strong models make the same
-mistakes rather than different ones. This convergence of error patterns
-suggests a genuine perceptual difficulty at $28\!\times\!28$ resolution,
-not any model-specific weakness.
+\noindent\textbf{MNIST.} The MNIST results were, if anything, a little
+anticlimactic. Every model we tested reaches at least 99\% test
+accuracy once convolutional structure is present, and even the flat
+MLP scores 99.03\%. The top-to-bottom spread across all seven models
+is only 0.67 percentage points (MLP at 99.03\% through SE-ResNet-Lite
+at 99.70\%). That is a smaller gap than we would have guessed before
+starting. Adding $180\times$ more parameters via ResNet-18 gains
+essentially nothing over a 62k-parameter LeNet-5 (99.31\%) on this
+task. In hindsight the EDA explains why: if the raw pixels are nearly
+linearly separable, a flat network with enough units can find the
+boundary, and there is nowhere for depth to add value. The confusion
+matrices in Fig.~\ref{fig:cm-mnist} confirm the pattern: all strong
+models make the exact same mistakes, on the same visually similar
+pairs ($\{4,9\}$, $\{3,8\}$, $\{7,9\}$). The errors are a dataset
+property, not a model weakness, which means no architecture we tested
+can fully solve them at $28\!\times\!28$ resolution.
 
-\noindent\textbf{CIFAR-10.} CIFAR-10 separates the architectures far
-more strongly. The MLP plateaus at 50.2\% test accuracy: without
-spatial convolutions it has no inductive bias to exploit local image
-structure, and the raw-pixel analysis in Fig.~\ref{fig:viz-raw}
-confirms there is no class-discriminative direction in pixel space for
-it to find. LeNet-5 reaches 61.0\% and SimpleCNN 75.3\%, but their
-shallow, narrow feature stacks hit a capacity ceiling before they can
-overfit. LeNet's training accuracy (60.8\%) barely exceeds its test
-accuracy (61.0\%), a near-zero gap that signals the model is saturated
-rather than overfitting. AlexNet (84.0\%), VGG-11 (89.5\%), and
-ResNet-18 (91.4\%) improve with depth, and SE-ResNet-Lite (92.7\%)
-outperforms all baselines at under 1\% parameter overhead, supporting
-the hypothesis of Section~\ref{sec:se-resnet-lite}.
+\noindent\textbf{CIFAR-10.} CIFAR-10 spreads the architectures far
+more widely, and the reasons are traceable back to each model's design.
+The MLP plateaus at 50.2\%: without spatial convolutions it has no
+inductive bias to exploit local image structure. The raw-pixel EDA
+in Fig.~\ref{fig:viz-raw} predicted exactly this ceiling --- there is
+no class-discriminative direction in pixel space for the MLP to find,
+so it essentially learns a class-conditional mean color, which gets
+you to roughly chance on the harder object pairs.
+
+LeNet-5 (61.0\%) and SimpleCNN (75.3\%) improve by adding spatial
+structure, but their shallow, narrow feature stacks hit a capacity
+ceiling before they can benefit from more training. LeNet's training
+accuracy (60.8\%) barely exceeds its test accuracy (61.0\%), a
+near-zero gap that signals saturation rather than overfitting: the
+model uses up its entire capacity before it can memorize the training
+set. The 14 percentage-point gap between LeNet-5 and SimpleCNN
+despite the latter being designed as a minimal two-block CNN is
+notable --- SimpleCNN uses ReLU and max-pooling throughout (LeNet-5
+uses average pooling and tanh in the original formulation), and those
+modern design choices alone account for a meaningful fraction of the
+gap.
+
+AlexNet (84.0\%) shows the value of depth and width: five conv layers
+with up to 384 channels build a much richer feature hierarchy than
+LeNet's two layers with 16 channels. VGG-11 (89.5\%) pushes this
+further with eight layers of $3\!\times\!3$ convolutions plus
+BatchNorm, which allows a much higher learning rate and more stable
+gradient flow. ResNet-18 (91.4\%) then overtakes VGG-11 with only
+slightly more parameters, specifically because skip connections allow
+it to train deeper layers effectively --- something VGG's plain
+network cannot do without gradient attenuation. SE-ResNet-Lite (92.7\%)
+adds the channel-attention mechanism on top, with the per-class
+confusion analysis suggesting the gain comes from amplifying the
+texture channels that differentiate animal classes.
 
 \noindent\textbf{Overfitting vs.\ underfitting.}
 The train-to-test accuracy gap is a clean diagnostic across model
@@ -690,22 +792,42 @@ geometry of the easy classes.
 
 \noindent\textbf{Exploratory data analysis.}
 Fig.~\ref{fig:viz-raw} shows PCA, LDA, and t-SNE projections of raw
-test pixels for both datasets. The contrast between the two datasets
-is stark. Under LDA, which finds the directions that maximally
-separate classes, MNIST's ten digit classes form clearly separated
-clusters even in two dimensions, with only slight overlap between
-visually similar pairs (7 and 9, 4 and 9). The t-SNE projection
-confirms this structure without class-label guidance. This near-linear
-separability in raw pixel space explains why even the flat MLP
-achieves 99\%: global pixel statistics carry enough discriminative
-signal that a network without spatial structure can still succeed.
-CIFAR-10 is the opposite: all three projections produce a single
-overlapping cloud regardless of method. The ten object classes are
-completely indistinguishable in raw pixel space, which is precisely
-why the MLP plateaus at 50.2\%. There is no class-discriminative
-direction in pixel space for it to find. Every percentage point gained above 50\%
-on CIFAR-10 comes from spatial feature learning that only convolution
-can provide.
+test pixels for both datasets, and the contrast could hardly be
+starker.
+
+On MNIST, the LDA projection separates all ten digit classes into
+clearly distinct clusters in just two dimensions. Only a few
+visually similar pairs (7 and 9, 4 and 9) show any overlap.
+The t-SNE projection, which uses no class labels, finds the same
+structure on its own. This near-linear separability in raw pixel
+space is not obvious \textit{a priori}: it means that global
+pixel-intensity patterns (where ink falls on the $28\!\times\!28$
+grid) carry nearly all the discriminative signal needed to tell digits
+apart. That directly explains why the flat MLP scores 99\% --- it does
+not need to understand edges, curves, or local structure to succeed
+because the digit class can be read off almost directly from the
+pixel histogram.
+
+CIFAR-10 is the opposite. PCA, LDA, and t-SNE all collapse the ten
+object classes into a single overlapping cloud. Even with class labels
+to guide it, LDA cannot find two dimensions that meaningfully separate
+``cat'' from ``dog'' or ``automobile'' from ``truck'' in raw pixel
+space. The reason is that CIFAR-10's discriminative cues are
+relational --- textures, part configurations, local edges --- and those
+are precisely the features that convolution is designed to detect.
+This EDA observation is the clearest possible preview of the main
+results: a model that cannot exploit spatial structure (MLP) will be
+limited to $\approx 50\%$ on CIFAR-10, while every percentage point
+above that comes from spatial feature learning.
+
+The t-SNE of SE-ResNet-Lite's \emph{learned} features
+(Fig.~\ref{fig:tsne-cifar10}) tells the complementary story: after
+training, the penultimate-layer representations separate the ten
+classes into well-defined clusters, with residual overlap concentrated
+on the animal categories (cat, dog, deer, bird) and the vehicle pair
+(truck, automobile). The network has transformed a completely
+inseparable input space into a nearly separable representation --- that
+transformation is what the 19 convolutional layers are doing.
 
 \begin{figure}[t]
 \centering
@@ -745,28 +867,27 @@ from each dataset.
 \end{figure}
 
 % =====================================================================
-\section{Discussion (A: 50\%, B: 50\%)}
+\section{Discussion}
 \label{sec:discussion}
 
-Three patterns emerge consistently across the experiments.
+Three patterns stand out across the results.
 
-\subsection{Architecture matters far more on CIFAR-10 than on MNIST (A: 50\%, B: 50\%)}
+\subsection{Architecture matters far more on CIFAR-10 than on MNIST}
 
-On MNIST, our seven models span only 0.67 percentage points of test
-accuracy (99.03\% for MLP through 99.70\% for SE-ResNet-Lite). Adding
-$180\times$ more parameters via ResNet-18 gains essentially nothing
-over a 62k-parameter LeNet-5 on this task. CIFAR-10 changes
-everything: the same MLP that earns 99.03\% on MNIST earns only
-50.2\% on CIFAR-10, a 48.8 percentage-point drop on a dataset with
-the same number of classes and a nearly identical training setup. The
-42.5 percentage-point gap between MLP and SE-ResNet-Lite on CIFAR-10
-is the central empirical finding of this project, and it comes almost
-entirely from the spatial inductive bias introduced by convolution.
-Depth and channel width also matter (LeNet to AlexNet to ResNet spans
-another 31 points), but the largest single jump is from no convolution
-to any convolution at all.
+On MNIST the seven models span just 0.67 percentage points of test
+accuracy (99.03\% for MLP through 99.70\% for SE-ResNet-Lite). Giving
+ResNet-18 $180\times$ more parameters than LeNet-5 buys essentially
+nothing on this task. CIFAR-10 tells a completely different story:
+the MLP that scores 99.03\% on MNIST falls to 50.2\% on CIFAR-10, a
+48.8 point drop on a dataset with the same number of classes and the
+same training setup. The 42.5 point gap between MLP and SE-ResNet-Lite
+on CIFAR-10 is the central result of this project, and it traces
+almost entirely to the spatial inductive bias that convolution
+provides. Depth and width also matter (from LeNet to AlexNet to
+ResNet spans another 31 points), but the single largest jump comes
+from going from no convolution to any convolution at all.
 
-\subsection{Residual connections are decisive at depth (A: 50\%, B: 50\%)}
+\subsection{Residual connections are decisive at depth}
 
 VGG-11 (9.5M parameters) and ResNet-18 (11.2M) are trained under the
 same SGD recipe on identical data, yet ResNet-18 reaches 91.4\%
@@ -782,30 +903,34 @@ concrete: for a fixed parameter and training budget, a residual
 architecture uses that budget more efficiently than a comparable
 plain network of similar depth.
 
-\subsection{Channel attention is a small, consistent gain (A: 50\%, B: 50\%)}
+\subsection{Channel attention is a small, consistent gain}
 
 SE-ResNet-Lite adds 85{,}000 parameters (0.76\%) on top of ResNet-18
-yet improves CIFAR-10 test accuracy by 1.3 percentage points
-(91.4\%\,$\to$\,92.7\%) and MNIST accuracy by 0.05 points. Both AUROC
-and macro F1 improve in the same direction on both datasets. On
-CIFAR-10, the gain is most visible on the hardest classes: SE-ResNet-Lite
-pushes \emph{cat} recall from roughly 80\% to 82.6\% and improves
-\emph{dog} recall by a similar margin, which is consistent with SE
-channel gating amplifying texture channels that separate these
-visually similar categories. The depthwise-separable stem swaps
-1{,}728 standard parameters for 219 factored ones without any
-accuracy cost, confirming that the original $3\!\times\!3$ stem was
-not a representational bottleneck.
+and improves CIFAR-10 test accuracy by 1.3 percentage points
+(91.4\%\,$\to$\,92.7\%) and MNIST accuracy by 0.05 points. Honestly,
+we were not confident the gain would be visible at this scale going
+into training --- most SE papers report results on ImageNet, and 1.3
+points on a 10-class $32\!\times\!32$ benchmark felt optimistic. When
+it showed up consistently across both datasets and across all five
+metrics (AUROC and macro F1 both improved), we felt more confident it
+was real rather than lucky. The where of the gain is also satisfying:
+SE-ResNet-Lite pushes \emph{cat} recall from roughly 80\% to 82.6\%
+and \emph{dog} recall by a similar margin, which is exactly where we
+would have predicted channel attention to help given that cat/dog
+confusion is a texture-discrimination problem. The depthwise-separable
+stem swaps 1{,}728 standard parameters for 219 factored ones with no
+accuracy cost, which confirmed our intuition that the stem was not
+where the network's representational power lives.
 
-The SE gain is small and the experiment uses a single seed, so we are
-careful not to overstate the result. What we can say is that across
-two datasets with very different characteristics (one easy and
-low-resolution, one harder and in color), the modification reliably moves
-every metric in the right direction at negligible parameter cost. That
-repeatability across datasets is more meaningful than the size of any
-individual improvement.
+The gain is small and comes from a single seed, so we do not want to
+overstate it. What we can say with more confidence is that the
+modification moved every metric in the right direction on both
+datasets, one easy and low-resolution, one harder and in color.
+That consistency across two very different settings is more informative
+than the size of the individual improvements, which could easily flip
+with a different random seed or hyperparameter choice.
 
-\subsection{Loss-curve diagnostics (A: 50\%, B: 50\%)}
+\subsection{Loss-curve diagnostics}
 
 Fig.~\ref{fig:curves-resnet-cifar10} shows training and validation
 loss for ResNet-18 and SE-ResNet-Lite on CIFAR-10. Both follow the
@@ -827,7 +952,49 @@ accuracy track each other within 0.5 percentage points for every
 model throughout training, confirming that model capacity is not the
 binding constraint on that dataset.
 
-\subsection{Limitations (A: 50\%, B: 50\%)}
+\subsection{What surprised us and what we would do differently}
+
+Several results were not what we initially expected. The MLP's
+99.03\% on MNIST was surprising: intuitively, a network that
+processes every pixel independently should struggle with handwritten
+digits since the exact pixel location of a stroke shifts with
+writer and pen pressure. In practice it does not matter, because
+LDA on raw MNIST pixels shows the classes are almost linearly
+separable even without spatial structure. We only understood why
+after doing the EDA --- that analysis changed how we think about
+when spatial inductive bias actually matters.
+
+LeNet-5's test accuracy (61.0\%) \emph{exceeding} its training
+accuracy (60.8\%) on CIFAR-10 also required a second look. Our first
+instinct was to suspect a bug. The explanation is mundane but
+instructive: the model is too narrow to overfit on CIFAR-10, so the
+augmented training set (with random crops and flips) is harder for
+it than the clean test set. Once the model's capacity is
+fully exhausted, augmentation actually hurts training accuracy.
+This kind of underfitting signature --- near-zero train-val gap but
+also low accuracy --- is easy to misread as ``good generalization''
+if you only look at the gap and not the absolute numbers.
+
+The SE gain also looked bigger in our in-progress logs than in the
+final numbers. After the first five CIFAR-10 epochs, SE-ResNet-Lite
+was consistently $\sim\!2$ points ahead of ResNet-18. By the end it
+closed to 1.3 points. The gap narrowed because SE's advantage is most
+visible when the learning rate is still large and the network is
+updating aggressively. With cosine annealing driving the rate to
+zero, the final checkpoints converge closer together. This suggests
+that running more epochs with a warm restart might have preserved
+more of the early advantage.
+
+If we ran this project again, the first thing we would add is multiple
+random seeds. Comparing two models that differ by 1--2 percentage
+points off a single seed is statistically weak; three or five seeds
+with mean and standard deviation would make the SE claim much more
+defensible. We would also run the intermediate ablations (SE-only and
+DW-stem-only variants of ResNet-18) to understand how much each
+modification contributes independently, rather than attributing all
+of the 1.3-point gain to the combination.
+
+\subsection{Limitations}
 
 \noindent\textbf{Single seed.} Every run uses seed 42. We do not
 report variance across seeds, which would be especially useful when
@@ -860,25 +1027,39 @@ loss with label-smoothing cross-entropy; and evaluating on Tiny
 ImageNet to see whether the SE gain grows with input resolution.
 
 % =====================================================================
-\section{Conclusion (A: 50\%, B: 50\%)}
+\section{Conclusion}
 \label{sec:conclusion}
 
 We trained and compared seven neural-network architectures on MNIST
 and CIFAR-10 under a single fixed pipeline, spanning flat MLPs,
 shallow CNNs, classical designs (LeNet-5, AlexNet, VGG-11, ResNet-18),
 and our own SE-ResNet-Lite. The results put concrete numbers on
-lessons that are qualitatively well-known: the jump from no
-convolution to any convolution accounts for 42.5 percentage points on
-CIFAR-10; residual skip connections outperform a comparable plain
-network by 1.9 points at similar parameter count; and SE channel
-attention adds 1.3 points at under 1\% parameter overhead. Perhaps
-the most striking finding is how sharply the dataset determines
-whether architecture matters at all: a model family that produces
-a near-zero accuracy spread on MNIST produces a 42-point spread on
-CIFAR-10. When the dataset has structure that convolution can exploit,
-architectural choices are decisive. When it does not, capacity is
-essentially irrelevant. All results are reproducible from the
-submitted code with a single fixed seed.
+lessons that are often stated but rarely felt until you run the
+experiments yourself: the jump from no convolution to any convolution
+accounts for 42.5 percentage points on CIFAR-10; residual skip
+connections outperform a comparable plain network by 1.9 points at
+similar parameter count; and SE channel attention adds 1.3 points at
+under 1\% parameter overhead.
+
+The finding that stuck with us most was not the accuracy numbers but
+how sharply the dataset determines whether architecture even matters.
+A model family that produces a near-zero accuracy spread on MNIST
+produces a 42-point spread on CIFAR-10 --- same number of classes,
+similar training setup, completely different story. We went into this
+project thinking architecture choice was always decisive. What we
+came out believing is that it depends entirely on whether the task
+actually needs the spatial structure that a deeper model is designed
+to exploit. When it does, the choices are decisive. When it does
+not --- as on MNIST --- adding capacity is essentially free money
+that changes nothing.
+
+We also came away with a concrete preference for residual architectures
+over plain deep networks after seeing VGG-11 underperform ResNet-18
+despite more parameters and similar training time. The skip
+connections feel less like a theoretical nicety in a paper and more
+like a practical fix to a real problem once you observe the difference
+in validation curves. All results are reproducible from the submitted
+code with a single fixed seed.
 
 % =====================================================================
 \bibliographystyle{IEEEtran}
