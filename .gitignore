@@ -1,0 +1,24 @@
+# Claude Code workspace state (per user request)
+.claude/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
+
+# Downloaded datasets (re-downloadable via torchvision)
+data/
+
+# Training checkpoints (large binary files; results/logs/ and results/figures/ are kept)
+results/checkpoints/
+
+# LaTeX intermediates
+report/build/
+report/*.aux
+report/*.bbl
+report/*.blg
+report/*.log
+report/*.out
+report/*.toc
+report/*.synctex.gz

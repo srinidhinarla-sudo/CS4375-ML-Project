@@ -1,0 +1,28 @@
+\begin{table*}[t]
+\centering
+\caption{Test-set results for each (architecture, dataset) pair. Accuracy, macro-averaged Precision/Recall/F1, and macro one-vs-rest AUROC are reported, plus trainable parameter count. Models marked with $^{*}$ are adapted for 32$\times$32 inputs.}
+\label{tab:main}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabular}{llrrrrrrr}
+\toprule
+Dataset & Model & Params & Train acc & Val acc & Test acc & Precision & Recall & F1 (AUROC) \\
+\midrule
+MNIST & MLP & 535.8k & 99.44 & 99.12 & \textbf{99.03} & 99.03 & 99.01 & 99.02 (99.99) \\
+ & SimpleCNN & 421.6k & 99.79 & 99.50 & \textbf{99.46} & 99.46 & 99.45 & 99.46 (100.00) \\
+ & LeNet-5 & 61.7k & 99.45 & 99.18 & \textbf{99.31} & 99.31 & 99.30 & 99.30 (100.00) \\
+ & AlexNet\textsuperscript{*} & 3.83M & 99.91 & 99.55 & \textbf{99.57} & 99.57 & 99.56 & 99.57 (100.00) \\
+ & VGG-11\textsuperscript{*} & 9.49M & 99.90 & 99.60 & \textbf{99.62} & 99.62 & 99.61 & 99.62 (100.00) \\
+ & ResNet-18\textsuperscript{*} & 11.17M & 99.89 & 99.58 & \textbf{99.65} & 99.65 & 99.65 & 99.65 (100.00) \\
+ & SE-ResNet-Lite (ours) & 11.26M & 99.93 & 99.67 & \textbf{99.70} & 99.70 & 99.69 & 99.70 (100.00) \\
+\midrule
+CIFAR-10 & MLP & 1.71M & 54.42 & 51.36 & \textbf{50.18} & 50.10 & 50.18 & 49.32 (88.71) \\
+ & SimpleCNN & 545.1k & 75.27 & 76.14 & \textbf{75.34} & 75.29 & 75.34 & 75.25 (96.85) \\
+ & LeNet-5 & 62.0k & 60.81 & 60.92 & \textbf{61.02} & 60.55 & 61.02 & 60.63 (92.92) \\
+ & AlexNet\textsuperscript{*} & 3.83M & 90.23 & 84.30 & \textbf{84.03} & 83.98 & 84.03 & 83.99 (98.55) \\
+ & VGG-11\textsuperscript{*} & 9.49M & 96.89 & 90.72 & \textbf{89.48} & 89.57 & 89.48 & 89.51 (99.32) \\
+ & ResNet-18\textsuperscript{*} & 11.17M & 98.32 & 92.28 & \textbf{91.38} & 91.39 & 91.38 & 91.38 (99.55) \\
+ & SE-ResNet-Lite (ours) & 11.26M & 99.04 & 93.54 & \textbf{92.67} & 92.65 & 92.67 & 92.65 (99.62) \\
+\bottomrule
+\end{tabular}
+\end{table*}
