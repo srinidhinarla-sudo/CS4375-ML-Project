@@ -83,10 +83,10 @@ This project asks two concrete questions:
 \begin{enumerate}
   \item How do classical and modern CNN architectures compare on
     MNIST and CIFAR-10 when trained under a single fixed pipeline?
-  \item Can a small, low-cost architectural modification --- adding
-    channel attention and a depthwise-separable stem to a ResNet-18
-    backbone --- give measurable improvements without significantly
-    increasing parameter count?
+  \item Can a small, low-cost modification (adding channel attention
+    and a depthwise-separable stem to a ResNet-18 backbone) give
+    measurable improvements without significantly increasing parameter
+    count?
 \end{enumerate}
 
 To answer these we re-implement seven models from scratch in
@@ -208,7 +208,7 @@ factored form replaces it with (a) a depthwise convolution of
 $k\!\times\!k$ kernel grouped by input channel ($k^2 C_{\text{in}}$
 parameters) followed by (b) a $1\!\times\!1$ pointwise convolution
 that mixes channels ($C_{\text{in}} C_{\text{out}}$ parameters), for a
-total of $C_{\text{in}}(k^2 + C_{\text{out}})$ parameters --- roughly
+total of $C_{\text{in}}(k^2 + C_{\text{out}})$ parameters, roughly
 $1/k^2$ of the standard form when $C_{\text{out}}\!\gg\!1$. The
 operation has the same receptive field as the standard convolution
 but a substantially smaller parameter and FLOP budget.
@@ -510,7 +510,7 @@ structure, and the raw-pixel analysis in Fig.~\ref{fig:viz-raw}
 confirms there is no class-discriminative direction in pixel space for
 it to find. LeNet-5 reaches 61.0\% and SimpleCNN 75.3\%, but their
 shallow, narrow feature stacks hit a capacity ceiling before they can
-overfit---LeNet's training accuracy (60.8\%) barely exceeds its test
+overfit. LeNet's training accuracy (60.8\%) barely exceeds its test
 accuracy (61.0\%), a near-zero gap that signals the model is saturated
 rather than overfitting. AlexNet (84.0\%), VGG-11 (89.5\%), and
 ResNet-18 (91.4\%) improve with depth, and SE-ResNet-Lite (92.7\%)
@@ -575,7 +575,7 @@ zero and training loss approaches its floor. Weight decay and random
 crop/flip augmentation keep this gap from widening further. The
 shallow models tell a different story: on CIFAR-10, the MLP and
 LeNet-5 training curves flatten early without a widening train-val
-gap, the textbook signature of underfitting---the model exhausts its
+gap, the textbook signature of underfitting: the model exhausts its
 representational capacity before it overfits. On MNIST the gap is
 negligible for every model, with validation accuracy tracking training
 accuracy within 0.5 percentage points throughout, reflecting how much
@@ -691,8 +691,8 @@ geometry of the easy classes.
 \noindent\textbf{Exploratory data analysis.}
 Fig.~\ref{fig:viz-raw} shows PCA, LDA, and t-SNE projections of raw
 test pixels for both datasets. The contrast between the two datasets
-is stark. Under LDA---which finds the directions that maximally
-separate classes---MNIST's ten digit classes form clearly separated
+is stark. Under LDA, which finds the directions that maximally
+separate classes, MNIST's ten digit classes form clearly separated
 clusters even in two dimensions, with only slight overlap between
 visually similar pairs (7 and 9, 4 and 9). The t-SNE projection
 confirms this structure without class-label guidance. This near-linear
@@ -702,8 +702,8 @@ signal that a network without spatial structure can still succeed.
 CIFAR-10 is the opposite: all three projections produce a single
 overlapping cloud regardless of method. The ten object classes are
 completely indistinguishable in raw pixel space, which is precisely
-why the MLP plateaus at 50.2\%---there is no class-discriminative
-direction for it to find. Every percentage point gained above 50\%
+why the MLP plateaus at 50.2\%. There is no class-discriminative
+direction in pixel space for it to find. Every percentage point gained above 50\%
 on CIFAR-10 comes from spatial feature learning that only convolution
 can provide.
 
@@ -762,8 +762,8 @@ the same number of classes and a nearly identical training setup. The
 42.5 percentage-point gap between MLP and SE-ResNet-Lite on CIFAR-10
 is the central empirical finding of this project, and it comes almost
 entirely from the spatial inductive bias introduced by convolution.
-Depth and channel width also matter---LeNet to AlexNet to ResNet spans
-another 31 points---but the largest single jump is from no convolution
+Depth and channel width also matter (LeNet to AlexNet to ResNet spans
+another 31 points), but the largest single jump is from no convolution
 to any convolution at all.
 
 \subsection{Residual connections are decisive at depth (A: 50\%, B: 50\%)}
@@ -799,8 +799,8 @@ not a representational bottleneck.
 
 The SE gain is small and the experiment uses a single seed, so we are
 careful not to overstate the result. What we can say is that across
-two datasets with different characteristics---one easy and
-low-resolution, one harder and color---the modification reliably moves
+two datasets with very different characteristics (one easy and
+low-resolution, one harder and in color), the modification reliably moves
 every metric in the right direction at negligible parameter cost. That
 repeatability across datasets is more meaningful than the size of any
 individual improvement.
@@ -812,7 +812,7 @@ loss for ResNet-18 and SE-ResNet-Lite on CIFAR-10. Both follow the
 same pattern: loss decreases smoothly through most of training, then
 a small gap between train and validation opens in the final epochs
 as the cosine schedule pushes the learning rate toward zero. This
-is mild overfitting---training loss approaches its floor faster than
+is mild overfitting, as training loss approaches its floor faster than
 validation loss because the augmented training distribution is harder
 than the clean test distribution. The cosine schedule, weight decay,
 and data augmentation together keep the gap bounded at roughly
@@ -820,7 +820,7 @@ and data augmentation together keep the gap bounded at roughly
 
 The shallow models show the reverse: on CIFAR-10, the MLP's training
 loss plateaus above 1.5 nats after the first few epochs without any
-widening train-val gap. This is not overfitting but underfitting---the
+widening train-val gap. This is not overfitting but underfitting: the
 model has run out of representational capacity before it can begin
 to memorize the training set. On MNIST, training and validation
 accuracy track each other within 0.5 percentage points for every
