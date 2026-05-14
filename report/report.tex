@@ -448,12 +448,20 @@ uses centered, un-augmented inputs. CIFAR-10 training uses standard
 random $4$-pixel zero-padded crops and horizontal flips; CIFAR-10
 evaluation uses centered, un-augmented inputs.
 
-\noindent\textbf{Optimizer and schedule.} See
-Section~\ref{sec:training-recipe}. All runs use batch size 128, seed
-42, and cosine learning-rate annealing across the full training
-horizon. Best validation accuracy determines the checkpoint used for
-the final test evaluation. We do not perform any hyperparameter sweep
-beyond the per-family defaults documented above.
+\noindent\textbf{Optimizer and schedule.}
+Optimizer selection follows the per-family logic in
+Section~\ref{sec:training-recipe}: SGD (momentum 0.9, weight decay
+$5\!\times\!10^{-4}$, Nesterov, lr\,=\,0.1) for BatchNorm-based deep
+models (VGG-11, ResNet-18, SE-ResNet-Lite) and Adam (lr\,=\,$10^{-3}$)
+for all others. We chose 20 epochs for MNIST (validation accuracy
+plateaued on most models by epoch 10, so extra epochs offered no
+benefit) and 25 for CIFAR-10 (loss curves still descend meaningfully
+at epoch 20, making the additional passes productive). Cosine
+annealing reduces the learning rate smoothly to zero over the full
+horizon, avoiding the need to tune a manual step-decay schedule. The
+best-validation-accuracy checkpoint is used for test evaluation rather
+than the final epoch, which matters most for VGG-11 and ResNet-18
+where late-epoch training loss can dip below the validation floor.
 
 \noindent\textbf{Hardware.} Training was performed on an Apple Silicon
 laptop using PyTorch~\cite{paszke2019pytorch} with the Metal
@@ -481,26 +489,49 @@ parameters of each model. The table is generated automatically from
 the per-run history JSON files at the end of training, so all numbers
 shown can be reproduced from the code in the submission.
 
-\noindent\textbf{MNIST.} On MNIST every CNN comfortably exceeds 99\%
-test accuracy, and even the bare MLP exceeds 98\%. The dataset has
-very limited residual class confusion --- typically between the digit
-pairs $\{4,9\}$, $\{3,8\}$, and $\{7,9\}$ --- and is well-separated
-in feature space. The per-class precision/recall gap is under one
-percentage point for every deeper model. Confusion matrices in
-Fig.~\ref{fig:cm-mnist} show that residual errors are concentrated on
-visually similar digit pairs, and that the residual error pattern is
-essentially the same across the strongest models.
+\noindent\textbf{MNIST.} Every model we tested reaches at least 99\%
+test accuracy once convolutional structure is present, and even the
+flat MLP scores 99.03\%. The top-to-bottom spread across all seven
+models is only 0.67 percentage points (MLP at 99.03\% through
+SE-ResNet-Lite at 99.70\%), which tells us that MNIST is essentially
+a solved task at this scale: the extra capacity of ResNet-18 or VGG-11
+provides negligible benefit over a 62k-parameter LeNet-5 (99.31\%).
+Confusion matrices in Fig.~\ref{fig:cm-mnist} confirm that residual
+errors cluster on visually similar pairs, typically $\{4,9\}$,
+$\{3,8\}$, and $\{7,9\}$, and that all strong models make the same
+mistakes rather than different ones. This convergence of error patterns
+suggests a genuine perceptual difficulty at $28\!\times\!28$ resolution,
+not any model-specific weakness.
 
-\noindent\textbf{CIFAR-10.} CIFAR-10 separates the architectures much
-more strongly. The MLP plateaus around 50\% test accuracy, as
-expected: a flat fully connected model has no inductive bias to
-exploit the local spatial structure of natural-image data. The
-shallow CNNs (SimpleCNN, LeNet) push past 70\% but remain limited by
-their narrow feature stacks. AlexNet and VGG-11 improve further, and
-ResNet-18 reaches the strongest classical baseline on this dataset.
-SE-ResNet-Lite matches or modestly improves on ResNet-18 at a $<\!1\%$
-parameter overhead, supporting the hypothesis of
-Section~\ref{sec:se-resnet-lite}.
+\noindent\textbf{CIFAR-10.} CIFAR-10 separates the architectures far
+more strongly. The MLP plateaus at 50.2\% test accuracy: without
+spatial convolutions it has no inductive bias to exploit local image
+structure, and the raw-pixel analysis in Fig.~\ref{fig:viz-raw}
+confirms there is no class-discriminative direction in pixel space for
+it to find. LeNet-5 reaches 61.0\% and SimpleCNN 75.3\%, but their
+shallow, narrow feature stacks hit a capacity ceiling before they can
+overfit---LeNet's training accuracy (60.8\%) barely exceeds its test
+accuracy (61.0\%), a near-zero gap that signals the model is saturated
+rather than overfitting. AlexNet (84.0\%), VGG-11 (89.5\%), and
+ResNet-18 (91.4\%) improve with depth, and SE-ResNet-Lite (92.7\%)
+outperforms all baselines at under 1\% parameter overhead, supporting
+the hypothesis of Section~\ref{sec:se-resnet-lite}.
+
+\noindent\textbf{Overfitting vs.\ underfitting.}
+The train-to-test accuracy gap is a clean diagnostic across model
+families. Shallow models show virtually no gap: SimpleCNN scores
+75.3\% on both train and test, and LeNet-5's test accuracy (61.0\%)
+actually exceeds its training accuracy (60.8\%), a classic sign that
+the augmented training distribution is harder for these capacity-limited
+models than the clean test set. The three deepest models each show a
+6--7 percentage-point gap: VGG-11 at 7.4\,pp (96.9\% to 89.5\%),
+ResNet-18 at 6.9\,pp (98.3\% to 91.4\%), and SE-ResNet-Lite at
+6.4\,pp (99.0\% to 92.7\%). Weight decay and cosine annealing keep
+this mild; without them, VGG-11's gap would likely be wider given its
+large dense classifier head. That SE-ResNet-Lite has the
+\emph{smallest} gap despite the highest training accuracy suggests its
+channel gating focuses capacity on discriminative channels rather than
+noise patterns.
 
 \begin{figure}[t]
 \centering
@@ -534,14 +565,21 @@ shape indicates the dataset.}
 \end{figure}
 
 \noindent\textbf{Training dynamics.}
-Fig.~\ref{fig:curves-resnet-cifar10} shows train and validation loss
-and accuracy curves for ResNet-18 and SE-ResNet-Lite on CIFAR-10.
-Both models exhibit smoothly decreasing training loss; the validation
-curves track training closely until the final few epochs, after which
-a small generalization gap opens --- a mild but characteristic
-indication of overfitting that data augmentation (random crops +
-horizontal flips on CIFAR-10) and the cosine schedule largely keep in
-check. On MNIST the gap is essentially absent for every model.
+Fig.~\ref{fig:curves-resnet-cifar10} shows training and validation
+loss and accuracy for ResNet-18 and SE-ResNet-Lite on CIFAR-10. Both
+exhibit the expected behavior for well-regularized deep models: loss
+falls smoothly, validation tracks training closely through most of
+training, and a small generalization gap opens only in the final
+several epochs as the cosine schedule pushes the learning rate toward
+zero and training loss approaches its floor. Weight decay and random
+crop/flip augmentation keep this gap from widening further. The
+shallow models tell a different story: on CIFAR-10, the MLP and
+LeNet-5 training curves flatten early without a widening train-val
+gap, the textbook signature of underfitting---the model exhausts its
+representational capacity before it overfits. On MNIST the gap is
+negligible for every model, with validation accuracy tracking training
+accuracy within 0.5 percentage points throughout, reflecting how much
+simpler the task is relative to each model's capacity.
 
 \begin{figure}[t]
 \centering
@@ -650,16 +688,24 @@ the channels that distinguish cat from dog (likely texture-related)
 the network can shave off the most-confused mass without changing the
 geometry of the easy classes.
 
-\noindent\textbf{MNIST class structure.}
-Fig.~\ref{fig:viz-raw} shows PCA, LDA, and t-SNE projections of the
-\emph{raw pixels} of the two datasets, with each point colored by its
-class. MNIST is already linearly separable in 2D under LDA: the ten
-digit classes cluster cleanly even without a learned representation.
-CIFAR-10 raw pixels project to a single overlapping blob under all
-three methods, which empirically explains why the MLP plateaus near
-50\% on CIFAR-10 while every CNN clears 60\%: there is essentially no
-class-discriminative direction in raw-pixel space that a fully
-connected network can recover.
+\noindent\textbf{Exploratory data analysis.}
+Fig.~\ref{fig:viz-raw} shows PCA, LDA, and t-SNE projections of raw
+test pixels for both datasets. The contrast between the two datasets
+is stark. Under LDA---which finds the directions that maximally
+separate classes---MNIST's ten digit classes form clearly separated
+clusters even in two dimensions, with only slight overlap between
+visually similar pairs (7 and 9, 4 and 9). The t-SNE projection
+confirms this structure without class-label guidance. This near-linear
+separability in raw pixel space explains why even the flat MLP
+achieves 99\%: global pixel statistics carry enough discriminative
+signal that a network without spatial structure can still succeed.
+CIFAR-10 is the opposite: all three projections produce a single
+overlapping cloud regardless of method. The ten object classes are
+completely indistinguishable in raw pixel space, which is precisely
+why the MLP plateaus at 50.2\%---there is no class-discriminative
+direction for it to find. Every percentage point gained above 50\%
+on CIFAR-10 comes from spatial feature learning that only convolution
+can provide.
 
 \begin{figure}[t]
 \centering
@@ -706,68 +752,80 @@ Three patterns emerge consistently across the experiments.
 
 \subsection{Architecture matters far more on CIFAR-10 than on MNIST (A: 50\%, B: 50\%)}
 
-Almost any reasonable model can solve MNIST: the spread of test
-accuracy across our seven models is well under a single percentage
-point, and even the bare MLP exceeds 98\%. CIFAR-10 is qualitatively
-different. The gap between an MLP and a residual CNN exceeds 30
-percentage points on the same data, with the same training time
-budget. This reflects the much richer spatial and color structure of
-natural images, which a fully connected network has no inductive bias
-to exploit. The same lesson explains the smaller gap between
-SimpleCNN/LeNet and AlexNet/VGG-11: depth and channel width carry a
-real return when the underlying data has rich spatial structure, but
-when the data is essentially a low-noise digit recognition task the
-extra capacity is wasted.
+On MNIST, our seven models span only 0.67 percentage points of test
+accuracy (99.03\% for MLP through 99.70\% for SE-ResNet-Lite). Adding
+$180\times$ more parameters via ResNet-18 gains essentially nothing
+over a 62k-parameter LeNet-5 on this task. CIFAR-10 changes
+everything: the same MLP that earns 99.03\% on MNIST earns only
+50.2\% on CIFAR-10, a 48.8 percentage-point drop on a dataset with
+the same number of classes and a nearly identical training setup. The
+42.5 percentage-point gap between MLP and SE-ResNet-Lite on CIFAR-10
+is the central empirical finding of this project, and it comes almost
+entirely from the spatial inductive bias introduced by convolution.
+Depth and channel width also matter---LeNet to AlexNet to ResNet spans
+another 31 points---but the largest single jump is from no convolution
+to any convolution at all.
 
 \subsection{Residual connections are decisive at depth (A: 50\%, B: 50\%)}
 
-VGG-11 has substantially more parameters than ResNet-18 ($\sim\!9.5\textsc{m}$
-versus $\sim\!11.2\textsc{m}$ --- the former is dominated by the
-classifier head, the latter by the convolutional body). Despite this,
-ResNet-18 reaches a higher CIFAR-10 test accuracy under exactly the
-same training recipe. The skip connections allow the deeper residual
-network to be trained reliably without the optimization difficulty
-that a $\sim\!20$-layer plain network would otherwise face. This is
-the cleanest cross-architecture lesson in our experiments: at
-comparable parameter budgets and identical training schedules, the
-residual model wins.
+VGG-11 (9.5M parameters) and ResNet-18 (11.2M) are trained under the
+same SGD recipe on identical data, yet ResNet-18 reaches 91.4\%
+CIFAR-10 test accuracy versus VGG-11's 89.5\%, a 1.9 percentage-point
+gap despite VGG-11 having fewer parameters. The difference lies in
+architecture, not scale. VGG-11 concentrates parameters in five
+max-pool stages and a large dense head; ResNet-18 distributes capacity
+across eight residual blocks whose skip connections prevent gradient
+degradation in deeper layers. VGG-11 also shows the largest
+train-to-test gap of any model (7.4 pp), suggesting its dense head
+overfits more than ResNet-18's global average pool. The lesson is
+concrete: for a fixed parameter and training budget, a residual
+architecture uses that budget more efficiently than a comparable
+plain network of similar depth.
 
 \subsection{Channel attention is a small, consistent gain (A: 50\%, B: 50\%)}
 
-SE-ResNet-Lite adds less than $1\%$ to the parameter count of
-ResNet-18 but improves test accuracy and macro F1 on both datasets.
-On CIFAR-10 the improvement is concentrated on the most-confused
-animal classes (Fig.~\ref{fig:cm-cifar10}), which is consistent with
-channel attention helping the network amplify the texture channels
-that distinguish, e.g., \emph{cat} from \emph{dog}. The
-depthwise-separable stem does not hurt accuracy, which suggests the
-standard $3\!\times\!3$ stem was not a bottleneck in the baseline.
+SE-ResNet-Lite adds 85{,}000 parameters (0.76\%) on top of ResNet-18
+yet improves CIFAR-10 test accuracy by 1.3 percentage points
+(91.4\%\,$\to$\,92.7\%) and MNIST accuracy by 0.05 points. Both AUROC
+and macro F1 improve in the same direction on both datasets. On
+CIFAR-10, the gain is most visible on the hardest classes: SE-ResNet-Lite
+pushes \emph{cat} recall from roughly 80\% to 82.6\% and improves
+\emph{dog} recall by a similar margin, which is consistent with SE
+channel gating amplifying texture channels that separate these
+visually similar categories. The depthwise-separable stem swaps
+1{,}728 standard parameters for 219 factored ones without any
+accuracy cost, confirming that the original $3\!\times\!3$ stem was
+not a representational bottleneck.
 
-The size of the SE gain is small and the experiment is single-seed,
-so we are careful not to overstate the conclusion: what we report is
-a directional confirmation of the SE literature on small benchmarks,
-not a new state-of-the-art claim. The point of the architecture is
-that it costs essentially nothing in parameters and reliably moves
-the metric in the right direction across two distinct datasets.
+The SE gain is small and the experiment uses a single seed, so we are
+careful not to overstate the result. What we can say is that across
+two datasets with different characteristics---one easy and
+low-resolution, one harder and color---the modification reliably moves
+every metric in the right direction at negligible parameter cost. That
+repeatability across datasets is more meaningful than the size of any
+individual improvement.
 
 \subsection{Loss-curve diagnostics (A: 50\%, B: 50\%)}
 
-Fig.~\ref{fig:curves-resnet-cifar10} confirms the qualitative
-diagnostic pattern from the project guidelines: validation and
-training loss decrease together until the final few epochs, after
-which they diverge slightly. This is mild overfitting in the
-late-cosine-annealing regime --- training loss approaches zero faster
-than validation loss because the augmentation only weakly perturbs
-the training distribution. The cosine schedule, dropout in the
-non-residual models, and weight decay in the residual models all
-contribute to keeping the gap small.
+Fig.~\ref{fig:curves-resnet-cifar10} shows training and validation
+loss for ResNet-18 and SE-ResNet-Lite on CIFAR-10. Both follow the
+same pattern: loss decreases smoothly through most of training, then
+a small gap between train and validation opens in the final epochs
+as the cosine schedule pushes the learning rate toward zero. This
+is mild overfitting---training loss approaches its floor faster than
+validation loss because the augmented training distribution is harder
+than the clean test distribution. The cosine schedule, weight decay,
+and data augmentation together keep the gap bounded at roughly
+6--7 percentage points.
 
-For the shallow models the picture is reversed: on MNIST in
-particular, training and validation curves are essentially
-identical, which is consistent with the model capacity being more
-than enough for the task. The MLP and SimpleCNN on CIFAR-10 underfit
-mildly: their training loss never reaches near-zero, indicating that
-the model has hit its capacity ceiling on this data.
+The shallow models show the reverse: on CIFAR-10, the MLP's training
+loss plateaus above 1.5 nats after the first few epochs without any
+widening train-val gap. This is not overfitting but underfitting---the
+model has run out of representational capacity before it can begin
+to memorize the training set. On MNIST, training and validation
+accuracy track each other within 0.5 percentage points for every
+model throughout training, confirming that model capacity is not the
+binding constraint on that dataset.
 
 \subsection{Limitations (A: 50\%, B: 50\%)}
 
@@ -805,19 +863,22 @@ ImageNet to see whether the SE gain grows with input resolution.
 \section{Conclusion (A: 50\%, B: 50\%)}
 \label{sec:conclusion}
 
-We re-implemented and compared seven neural-network architectures on
-MNIST and CIFAR-10 under a single training pipeline. Our novel
-\textbf{SE-ResNet-Lite}, which combines Squeeze-and-Excitation
-channel attention with a depthwise-separable stem on top of a
-ResNet-18 backbone, matches or modestly exceeds the ResNet-18
-baseline on both datasets at less than 1\% parameter overhead. The
-experiments confirm three classical lessons from the deep-learning
-literature: residual connections are decisive for training deeper
-models, channel attention is a low-cost gain on natural-image
-classification, and architectural inductive bias matters most when
-the data has rich spatial structure. The implementation, training
-logs, and figures are reproducible from the code in the submission
-using a single fixed seed and a published training recipe.
+We trained and compared seven neural-network architectures on MNIST
+and CIFAR-10 under a single fixed pipeline, spanning flat MLPs,
+shallow CNNs, classical designs (LeNet-5, AlexNet, VGG-11, ResNet-18),
+and our own SE-ResNet-Lite. The results put concrete numbers on
+lessons that are qualitatively well-known: the jump from no
+convolution to any convolution accounts for 42.5 percentage points on
+CIFAR-10; residual skip connections outperform a comparable plain
+network by 1.9 points at similar parameter count; and SE channel
+attention adds 1.3 points at under 1\% parameter overhead. Perhaps
+the most striking finding is how sharply the dataset determines
+whether architecture matters at all: a model family that produces
+a near-zero accuracy spread on MNIST produces a 42-point spread on
+CIFAR-10. When the dataset has structure that convolution can exploit,
+architectural choices are decisive. When it does not, capacity is
+essentially irrelevant. All results are reproducible from the
+submitted code with a single fixed seed.
 
 \section*{Acknowledgment}
 
